@@ -183,8 +183,8 @@ span.chatbot-icon {
 
 .chatbot-notification {
     position: absolute; /* Essencial para não empurrar a imagem */
-    top: 0px;           /* Posição vertical: 0px fica na borda superior da caixa */
-    right: 0px;         /* Posição horizontal: 0px fica na borda direita */
+    top: -14px;           /* Posição vertical: 0px fica na borda superior da caixa */
+    right: 8px;         /* Posição horizontal: 0px fica na borda direita */
     width: 12px;        /* Tamanho da bolinha */
     height: 12px;
     background: var(--chatbot-status-online);
@@ -300,4 +300,5 @@ span.chatbot-icon {
     pointer-events: none;
     transition: opacity 0.3s ease;
 }
+
 
