@@ -82,7 +82,7 @@ function initializeChatbot() {
 
         welcomeContainer.innerHTML = `
             <strong>Bytezinho AI</strong>
-            <p>Olá, ${escapeHtml(userName)}! Sou o Bytezinho, seu assistente de IA. Como posso ajudar você hoje?</p>
+            <p>Olá, ${escapeHtml(userName)}! Sou o Bytezinho, criado por alunos do curso jovem programador. Como posso ajudar você hoje?</p>
             <div class="suggestions">
                 <button class="suggestion-btn" data-message="Como faço para participar?">Como faço para participar?</button>
                 <button class="suggestion-btn" data-message="Sou menor de idade posso participar?">Sou menor de idade posso participar?</button>
@@ -255,3 +255,4 @@ function initializeChatbot() {
 }
 
 initializeChatbot();
+
