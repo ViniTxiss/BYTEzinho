@@ -181,16 +181,18 @@ span.chatbot-icon {
     padding: 0;
 }
 
-.chatbot-notification { position: absolute; top: -5px; right: -5px; width: 10px; height: 10px; background: var(--chatbot-status-online); border-radius: 50%; border: 2px solid var(--text-primary); }
-
-/* small responsive tweak */
-@media (max-width: 480px) {
-  .chatbot-container {
-    right: 12px;
-    left: 12px;
-    bottom: 85px; /* Ajustado para melhor posicionamento em mobile */
-    width: auto;
-  }
+.chatbot-notification {
+    position: absolute; /* Essencial para não empurrar a imagem */
+    top: 0px;           /* Posição vertical: 0px fica na borda superior da caixa */
+    right: 0px;         /* Posição horizontal: 0px fica na borda direita */
+    width: 12px;        /* Tamanho da bolinha */
+    height: 12px;
+    background: var(--chatbot-status-online);
+    border-radius: 50%;
+    border: 2px solid var(--text-primary); /* Cria uma borda para separar da imagem */
+    z-index: 10;        /* Garante que fique ACIMA da imagem */
+    pointer-events: none; /* O clique passa direto pela bolinha e vai pro botão */
+}
 
 }
 
@@ -298,3 +300,4 @@ span.chatbot-icon {
     pointer-events: none;
     transition: opacity 0.3s ease;
 }
+
