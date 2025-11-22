@@ -103,12 +103,6 @@
    ESTILO DO BOTÃO CHATBOT (COM CORES HOLOGRÁFICAS DO TEMA)
    ========================================================= */
 
-/* Arquivo: chat.css (Linha 2) */
-
-/* =========================================================
-   ESTILO DO BOTÃO CHATBOT (COM CORES HOLOGRÁFICAS DO TEMA)
-   ========================================================= */
-
 /* COLE ESTE CÓDIGO NO LUGAR DO .chatbot-toggler ATUAL */
 .chatbot-toggler {
     /* 1. Posição e Tamanho */
@@ -168,8 +162,23 @@
     z-index: 2;
 }
 
+/* ALTERADO: Estilo específico para quando o ícone é uma imagem */
 .chatbot-icon {
-    font-size: 28px; /* Ajuste o tamanho do ícone 🤖 */
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Garante que a imagem cubra o botão */
+    /* Se a imagem tiver fundo transparente, você pode querer ajustar o padding */
+    padding: 5px; 
+}
+
+/* Se você quiser manter suporte a emojis texto, use uma classe diferente ou deixe o font-size apenas se não for img tag */
+span.chatbot-icon {
+    font-size: 28px;
+    display: inline;
+    width: auto;
+    height: auto;
+    padding: 0;
 }
 
 .chatbot-notification { position: absolute; top: -5px; right: -5px; width: 10px; height: 10px; background: var(--chatbot-status-online); border-radius: 50%; border: 2px solid var(--text-primary); }
