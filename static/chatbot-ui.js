@@ -1,5 +1,10 @@
 function initializeChatbot() {
     console.log('[chatbot-ui] initializing...');
+    
+    // --- CONFIGURAÇÃO: CONECTANDO AO BACKEND NO RENDER ---
+    const BACKEND_URL = "https://beckend-byte.onrender.com"; 
+    // -----------------------------------------------------
+
     const chatbotToggler = document.getElementById('chatbot-toggler');
     const chatbotContainer = document.getElementById('chatbot-container');
     const closeBtn = document.getElementById('chatbot-close-btn');
@@ -21,14 +26,12 @@ function initializeChatbot() {
     updateCurrentTime();
     setInterval(updateCurrentTime, 60 * 1000);
 
-    // Se os elementos não existirem no momento do carregamento, usamos event delegation
     if (chatbotToggler && chatbotContainer) {
         console.log('[chatbot-ui] found elements, attaching direct listeners');
         chatbotToggler.addEventListener('click', () => {
             chatbotContainer.classList.add('active');
             chatbotToggler.classList.add('chat-active');
             chatbotContainer.setAttribute('aria-hidden', 'false');
-            // Foca no primeiro campo do formulário de lead ao abrir
             const leadNameField = document.getElementById('lead-name');
             leadNameField && leadNameField.focus();
         });
@@ -36,12 +39,10 @@ function initializeChatbot() {
         closeBtn && closeBtn.addEventListener('click', () => {
             chatbotContainer.classList.remove('active');
             chatbotToggler.classList.remove('chat-active');
-            chatbotToggler.focus(); // Devolve o foco ao botão
+            chatbotToggler.focus(); 
             chatbotContainer.setAttribute('aria-hidden', 'true');
         });
     } else {
-        console.log('[chatbot-ui] elements not present yet — using delegated click handlers');
-        // Delegation: escuta cliques no documento para abrir/fechar
         document.addEventListener('click', (e) => {
             try {
                 const toggler = e.target.closest && e.target.closest('#chatbot-toggler');
@@ -52,21 +53,18 @@ function initializeChatbot() {
                         toggler.classList.add('chat-active');
                         container.classList.add('active');
                         container.setAttribute('aria-hidden', 'false');
-                        // Foca no primeiro campo do formulário de lead ao abrir
                         const leadNameField = document.getElementById('lead-name');
                         leadNameField && leadNameField.focus();
-                        console.log('[chatbot-ui] opened via delegation');
-                    } else console.warn('[chatbot-ui] container missing when trying to open');
+                    }
                 }
                 if (close) {
                     const container = document.getElementById('chatbot-container');
                     if (container) {
                         const toggler = document.getElementById('chatbot-toggler');
                         toggler && toggler.classList.remove('chat-active');
-                        toggler && toggler.focus(); // Devolve o foco ao botão
+                        toggler && toggler.focus();
                         container.classList.remove('active');
                         container.setAttribute('aria-hidden', 'true');
-                        console.log('[chatbot-ui] closed via delegation');
                     }
                 }
             } catch (err) {
@@ -93,7 +91,6 @@ function initializeChatbot() {
             <span class="message-time">${time}</span>
         `;
 
-        // Reanexa os eventos aos novos botões de sugestão
         const newSuggestionBtns = welcomeContainer.querySelectorAll('.suggestion-btn');
         newSuggestionBtns.forEach(btn => {
             btn.addEventListener('click', () => handleSuggestionClick(btn));
@@ -103,7 +100,6 @@ function initializeChatbot() {
     function addMessage(message, isBot = false, stream = false) {
         if (!chatBody) return;
 
-        // Se for uma mensagem do usuário ou uma mensagem de bot não-streaming
         if (!isBot || !stream) {
         const wrapper = document.createElement('div');
         wrapper.className = `chat-message ${isBot ? 'bot' : 'user'}`;
@@ -121,7 +117,6 @@ function initializeChatbot() {
             return;
         }
 
-        // Lógica de streaming para o bot
         const wrapper = document.createElement('div');
         wrapper.className = 'chat-message bot';
         const now = new Date();
@@ -137,11 +132,10 @@ function initializeChatbot() {
 
         const p = wrapper.querySelector('p');
         let i = 0;
-        const speed = 30; // Milissegundos por caractere
+        const speed = 30; 
 
         const typingInterval = setInterval(() => {
             if (i < message.length) {
-                // Usamos innerHTML para renderizar possíveis tags HTML como <strong>
                 p.innerHTML += escapeHtml(message.charAt(i));
                 i++;
                 chatBody.scrollTop = chatBody.scrollHeight;
@@ -161,9 +155,9 @@ function initializeChatbot() {
     }
 
     async function sendToServer(message) {
-        // Tenta usar o endpoint /chat configurado no back-end
         try {
-            const res = await fetch('/chat', {
+            // CORREÇÃO: Usa a URL absoluta do Render
+            const res = await fetch(`${BACKEND_URL}/chat`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message })
             });
@@ -171,8 +165,8 @@ function initializeChatbot() {
             const data = await res.json();
             return data.response || 'Desculpe, não obtive resposta.';
         } catch (err) {
-            console.warn('Chatbot: erro ao chamar /chat, fallback local', err);
-            return null; // sinaliza falha
+            console.warn('Chatbot: erro ao chamar API', err);
+            return null; 
         }
     }
 
@@ -181,11 +175,10 @@ function initializeChatbot() {
         if (!message) return;
         addMessage(message, false);
         inputField.value = '';
-        inputField.style.height = ''; // Reset height
+        inputField.style.height = ''; 
 
-        // Show a simple "typing" indicator
         const typing = document.createElement("div");
-        typing.className = "chat-message bot typing-indicator-li"; // Reutilizando a classe para fácil remoção
+        typing.className = "chat-message bot typing-indicator-li"; 
         typing.innerHTML = `
             <div class="typing-indicator">
                 <span></span>
@@ -199,9 +192,8 @@ function initializeChatbot() {
         typing.remove();
 
         if (serverResp) {
-            addMessage(serverResp, true, true); // Ativa o streaming para a resposta do bot
+            addMessage(serverResp, true, true); 
         } else {
-            // fallback simulado
             addMessage('Desculpe, ainda estou aprendendo a responder essa pergunta. (modo offline)', true, true);
         }
     }
@@ -212,34 +204,30 @@ function initializeChatbot() {
     async function handleSuggestionClick(btn) {
         const message = btn.getAttribute('data-message');
         if (!message) return;
-        // Preenche o input e envia a mensagem automaticamente
         if (inputField) {
             inputField.value = message;
             inputField.focus();
         }
-        console.log('[chatbot-ui] suggestion clicked, sending:', message);
         await sendMessage();
-        // Após enviar a sugestão, ocultar o contêiner de sugestões
         const suggestionsContainer = btn.closest('.suggestions');
         if (suggestionsContainer) {
             suggestionsContainer.style.display = 'none';
         }
     }
 
-    // Lógica do formulário de leads
     if (leadForm) {
         leadForm.addEventListener('submit', async (e) => {
-            e.preventDefault(); // Impede o recarregamento da página
+            e.preventDefault(); 
             const name = document.getElementById('lead-name').value;
             const email = document.getElementById('lead-email').value;
             const submitBtn = document.getElementById('lead-submit-btn');
 
-            // Desabilita o botão para evitar múltiplos envios
             submitBtn.disabled = true;
             submitBtn.textContent = 'Enviando...';
 
             try {
-                const response = await fetch('/leads', {
+                // CORREÇÃO: Usa a URL absoluta do Render para salvar leads
+                const response = await fetch(`${BACKEND_URL}/leads`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -248,30 +236,22 @@ function initializeChatbot() {
                 });
 
                 if (!response.ok) {
-                    throw new Error('Falha ao enviar os dados. Tente novamente.');
+                    throw new Error('Falha ao enviar os dados.');
                 }
 
-                console.log('[chatbot-ui] Lead enviado com sucesso:', { name, email });
-
-                // Esconde o formulário e mostra a conversa
+                console.log('[chatbot-ui] Lead enviado com sucesso');
                 leadFormContainer.classList.add('hidden');
                 chatConversation.classList.remove('hidden');
-
-                // Personaliza a mensagem de boas-vindas
                 addWelcomeMessage(name);
 
             } catch (error) {
-                console.error('[chatbot-ui] Erro ao capturar lead:', error);
-                alert(error.message); // Informa o usuário sobre o erro
-                submitBtn.disabled = false; // Reabilita o botão em caso de falha
+                console.error('Erro:', error);
+                alert("Erro ao conectar com o servidor. Tente novamente.");
+                submitBtn.disabled = false;
                 submitBtn.textContent = 'Iniciar Conversa';
             }
         });
-    } else {
-        console.warn('[chatbot-ui] Formulário de lead não encontrado.');
     }
 }
 
-// Executa a inicialização do chatbot.
-// Como o script é carregado no final do body, o DOM já estará pronto.
 initializeChatbot();
