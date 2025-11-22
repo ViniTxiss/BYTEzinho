@@ -4,11 +4,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const sendChatBtn = document.querySelector("#send-btn");
     const initialView = document.getElementById("initial-view");
     const predefinedQuestions = document.querySelectorAll(".predefined-questions a");
-    // Removendo a referência ao botão de expandir que não existe
-    // const expandBtn = document.getElementById("expand-btn");
 
     let userMessage;
-    const API_URL = "/chat"; // Endpoint do FastAPI
+    
+    // CORREÇÃO: URL Absoluta do Render
+    const API_URL = "[https://beckend-byte.onrender.com/chat](https://beckend-byte.onrender.com/chat)"; 
 
     const createChatLi = (message, className) => {
         const chatLi = document.createElement("li");
@@ -19,7 +19,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const showTypingIndicator = () => {
-        // Esconde a visão inicial se ela ainda estiver visível
         if (initialView && !initialView.hidden) {
             initialView.hidden = true;
         }
@@ -55,13 +54,13 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .then(res => res.json())
         .then(data => {
-            hideTypingIndicator(); // Esconde a animação
+            hideTypingIndicator(); 
             const botResponseLi = createChatLi(data.response, "incoming");
             chatbox.appendChild(botResponseLi);
         })
         .catch((error) => {
-            hideTypingIndicator(); // Esconde a animação em caso de erro
-            const errorLi = createChatLi("Oops! Algo deu errado. Por favor, tente novamente.", "incoming");
+            hideTypingIndicator(); 
+            const errorLi = createChatLi("Oops! Algo deu errado.", "incoming");
             chatbox.appendChild(errorLi);
             console.error("Erro:", error);
         })
@@ -72,20 +71,16 @@ document.addEventListener("DOMContentLoaded", () => {
         userMessage = message.trim();
         if (!userMessage) return;
 
-        chatInput.value = ""; // Limpa o input
-
-        // Adiciona a mensagem do usuário ao chat
+        chatInput.value = ""; 
         chatbox.appendChild(createChatLi(userMessage, "outgoing"));
         chatbox.scrollTo(0, chatbox.scrollHeight);
 
-        // Mostra a animação de "digitando" e busca a resposta
         setTimeout(() => {
             showTypingIndicator();
             generateResponse(chatbox.lastChild);
         }, 600);
     }
 
-    // Evento para perguntas predefinidas
     predefinedQuestions.forEach(link => {
         link.addEventListener("click", (e) => {
             e.preventDefault();
@@ -94,16 +89,12 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    // Evento para o botão de enviar
     sendChatBtn.addEventListener("click", () => handleChat(chatInput.value));
 
-    // Evento para a tecla Enter
     chatInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             handleChat(chatInput.value);
         }
     });
-    
- 
 });
