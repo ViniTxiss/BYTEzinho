@@ -102,7 +102,7 @@ function initializeChatbot() {
         newSuggestionBtns.forEach(btn => {
             btn.addEventListener('click', () => handleSuggestionClick(btn));
         });
-    }
+    }}
 
     function addMessage(message, isBot = false, stream = false) {
         if (!chatBody) return;
@@ -259,6 +259,7 @@ function initializeChatbot() {
             }
         });
     }
-}
+
 
 initializeChatbot();
+
