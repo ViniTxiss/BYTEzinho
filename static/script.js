@@ -125,6 +125,7 @@ function init() {
     uniforms: {
       uTime: { value: 0 },
       uResolution: { value: new THREE.Vector2(viewportWidth, viewportHeight) },
+      // FIXED: Pass actual canvas size including pixel ratio
       uActualResolution: {
         value: new THREE.Vector2(
           viewportWidth * pixelRatio,
@@ -231,8 +232,11 @@ function init() {
         return length(p) - r;
       }
       
+      // FIXED: Use actual resolution for coordinate transformation
       vec3 screenToWorld(vec2 normalizedPos) {
+        // normalizedPos is already 0-1, convert to -1 to 1
         vec2 uv = normalizedPos * 2.0 - 1.0;
+        // Apply aspect ratio correction using logical resolution
         uv.x *= uResolution.x / uResolution.y;
         return vec3(uv * 2.0, 0.0);
       }
@@ -245,6 +249,7 @@ function init() {
       float sceneSDF(vec3 pos) {
         float result = MAX_DIST;
         
+        // Fixed sphere positions using consistent coordinate system
         vec3 topLeftPos = screenToWorld(vec2(0.08, 0.92));
         float topLeft = sdSphere(pos - topLeftPos, uFixedTopLeftRadius);
         
@@ -266,6 +271,7 @@ function init() {
           dynamicMovementScale = mix(uMinMovementScale, uMaxMovementScale, mixFactor);
         }
         
+        // Optimized iterations for performance
         int maxIter = uIsMobile > 0.5 ? 4 : (uIsLowPower > 0.5 ? 6 : min(uSphereCount, 10));
         for (int i = 0; i < 10; i++) {
           if (i >= uSphereCount || i >= maxIter) break;
@@ -350,3 +356,742 @@ function init() {
           float occ = 0.0;
           float weight = 1.0;
           for (int i = 0; i < 6; i++) {
+            float dist = 0.01 + 0.015 * float(i * i);
+            float h = sceneSDF(p + n * dist);
+            occ += (dist - h) * weight;
+            weight *= 0.85;
+          }
+          return clamp(1.0 - occ, 0.0, 1.0);
+        }
+      }
+      
+      float softShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
+        if (uIsLowPower > 0.5) {
+          float result = 1.0;
+          float t = mint;
+          for (int i = 0; i < 3; i++) {
+            t += 0.3;
+            if (t >= maxt) break;
+            float h = sceneSDF(ro + rd * t);
+            if (h < EPSILON) return 0.0;
+            result = min(result, k * h / t);
+          }
+          return result;
+        } else {
+          float result = 1.0;
+          float t = mint;
+          for (int i = 0; i < 20; i++) {
+            if (t >= maxt) break;
+            float h = sceneSDF(ro + rd * t);
+            if (h < EPSILON) return 0.0;
+            result = min(result, k * h / t);
+            t += h;
+          }
+          return result;
+        }
+      }
+      
+      float rayMarch(vec3 ro, vec3 rd) {
+        float t = 0.0;
+        int maxSteps = uIsMobile > 0.5 ? 16 : (uIsSafari > 0.5 ? 16 : 48);
+        
+        for (int i = 0; i < 48; i++) {
+          if (i >= maxSteps) break;
+          
+          vec3 p = ro + rd * t;
+          float d = sceneSDF(p);
+          
+          if (d < EPSILON) {
+            return t;
+          }
+          
+          if (t > 5.0) {
+            break;
+          }
+          
+          t += d * (uIsLowPower > 0.5 ? 1.2 : 0.9);
+        }
+        
+        return -1.0;
+      }
+      
+      vec3 lighting(vec3 p, vec3 rd, float t) {
+        if (t < 0.0) {
+          return vec3(0.0);
+        }
+        
+        vec3 normal = calcNormal(p);
+        vec3 viewDir = -rd;
+        
+        vec3 baseColor = uSphereColor;
+        
+        float ao = ambientOcclusion(p, normal);
+        
+        vec3 ambient = uLightColor * uAmbientIntensity * ao;
+        
+        vec3 lightDir = normalize(uLightPosition);
+        float diff = max(dot(normal, lightDir), 0.0);
+        
+        float shadow = softShadow(p, lightDir, 0.01, 10.0, 20.0);
+        
+        vec3 diffuse = uLightColor * diff * uDiffuseIntensity * shadow;
+        
+        vec3 reflectDir = reflect(-lightDir, normal);
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), uSpecularPower);
+        float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), uFresnelPower);
+        
+        vec3 specular = uLightColor * spec * uSpecularIntensity * fresnel;
+        
+        vec3 fresnelRim = uLightColor * fresnel * 0.4;
+        
+        float distToCursor = length(p - uCursorSphere);
+        if (distToCursor < uCursorRadius + 0.4) {
+          float highlight = 1.0 - smoothstep(0.0, uCursorRadius + 0.4, distToCursor);
+          specular += uLightColor * highlight * 0.2;
+          
+          float glow = exp(-distToCursor * 3.0) * 0.15;
+          ambient += uLightColor * glow * 0.5;
+        }
+        
+        vec3 color = (baseColor + ambient + diffuse + specular + fresnelRim) * ao;
+        
+        color = pow(color, vec3(uContrast * 0.9));
+        color = color / (color + vec3(0.8));
+        
+        return color;
+      }
+      
+      float calculateCursorGlow(vec3 worldPos) {
+        float dist = length(worldPos.xy - uCursorSphere.xy);
+        float glow = 1.0 - smoothstep(0.0, uCursorGlowRadius, dist);
+        glow = pow(glow, 2.0);
+        return glow * uCursorGlowIntensity;
+      }
+      
+      void main() {
+        // FIXED: Use actual resolution for proper coordinate calculation
+        vec2 uv = (gl_FragCoord.xy * 2.0 - uActualResolution.xy) / uActualResolution.xy;
+        uv.x *= uResolution.x / uResolution.y;
+        
+        vec3 ro = vec3(uv * 2.0, -1.0);
+        vec3 rd = vec3(0.0, 0.0, 1.0);
+        
+        float t = rayMarch(ro, rd);
+        
+        vec3 p = ro + rd * t;
+        
+        vec3 color = lighting(p, rd, t);
+        
+        float cursorGlow = calculateCursorGlow(ro);
+        vec3 glowContribution = uCursorGlowColor * cursorGlow;
+        
+        if (t > 0.0) {
+          float fogAmount = 1.0 - exp(-t * uFogDensity);
+          color = mix(color, uBackgroundColor.rgb, fogAmount * 0.3);
+          
+          color += glowContribution * 0.3;
+          
+          gl_FragColor = vec4(color, 1.0);
+        } else {
+          if (cursorGlow > 0.01) {
+            gl_FragColor = vec4(glowContribution, cursorGlow * 0.8);
+          } else {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+          }
+        }
+      }
+    `,
+    transparent: true
+  });
+
+  const geometry = new THREE.PlaneGeometry(2, 2);
+  const mesh = new THREE.Mesh(geometry, material);
+  scene.add(mesh);
+
+  setupUI();
+  setupEventListeners();
+
+  // Initialize cursor position
+  onPointerMove({
+    clientX: window.innerWidth / 2,
+    clientY: window.innerHeight / 2
+  });
+}
+
+function setupEventListeners() {
+  window.addEventListener("mousemove", onPointerMove, { passive: true });
+  window.addEventListener("touchstart", onTouchStart, { passive: false });
+  window.addEventListener("touchmove", onTouchMove, { passive: false });
+  window.addEventListener("touchend", onTouchEnd, { passive: false });
+  window.addEventListener("touchcancel", onTouchEnd, { passive: false });
+  window.addEventListener("resize", onWindowResize, { passive: true });
+  window.addEventListener(
+    "orientationchange",
+    () => {
+      setTimeout(onWindowResize, 100);
+    },
+    { passive: true }
+  );
+}
+
+function onTouchStart(event) {
+  const target = event.target;
+
+  // Se o toque for em um botão, link, ou dentro do chatbot/overlays, não faz nada.
+  // Isso permite que o clique padrão do navegador funcione.
+  if (target.closest('button, a, .chatbot-container, #chatbot-details-overlay, #integration-overlay, div[vw]')) {
+    return;
+  }
+
+  // Se o toque for em qualquer outro lugar (como o fundo), previne o comportamento padrão
+  // para controlar a animação sem causar scroll ou outros efeitos indesejados.
+  event.preventDefault();
+
+  if (event.touches.length > 0) {
+    const touch = event.touches[0];
+    onPointerMove({
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    });
+  }
+}
+
+function onTouchMove(event) {
+  const target = event.target;
+
+  // Permite o scroll e outras interações dentro do chatbot e overlays.
+  if (target.closest('.chatbot-container, #chatbot-details-overlay, #integration-overlay, div[vw]')) {
+    return;
+  }
+
+  event.preventDefault(); // Previne o scroll da página ao mover o dedo na animação.
+
+  if (event.touches.length > 0) {
+    const touch = event.touches[0];
+    onPointerMove({
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    });
+  }
+}
+
+function onTouchEnd(event) {
+  // Reposiciona o cursor no centro para uma animação de retorno suave
+  targetMousePosition.x = 0.5;
+  targetMousePosition.y = 0.5;
+}
+
+function onPointerMove(event) {
+  // Use consistent coordinate system for mouse
+  targetMousePosition.x = event.clientX / window.innerWidth;
+  targetMousePosition.y = 1.0 - event.clientY / window.innerHeight;
+}
+
+// JavaScript version of screenToWorld for consistency
+function screenToWorldJS(normalizedX, normalizedY) {
+  const uv_x = normalizedX * 2.0 - 1.0;
+  const uv_y = normalizedY * 2.0 - 1.0;
+  const aspect = window.innerWidth / window.innerHeight;
+  return new THREE.Vector3(uv_x * aspect * 2.0, uv_y * 2.0, 0.0);
+}
+
+function updateStory(x, y, radius, merges, fps) {
+  const storyText = document.getElementById("story-text");
+  if (storyText) {
+    const newText = getStoryText(
+      x.toFixed(2),
+      y.toFixed(2),
+      radius.toFixed(2),
+      merges,
+      fps || 0
+    );
+    storyText.innerHTML = newText;
+  }
+}
+
+function applyPreset(presetName) {
+  const preset = presets[presetName];
+  if (!preset) return;
+
+  settings.preset = presetName;
+  Object.keys(preset).forEach((key) => {
+    if (settings.hasOwnProperty(key)) {
+      settings[key] = preset[key];
+    }
+  });
+
+  // Update uniforms
+  material.uniforms.uSphereCount.value = settings.sphereCount;
+  material.uniforms.uAmbientIntensity.value = settings.ambientIntensity;
+  material.uniforms.uDiffuseIntensity.value = settings.diffuseIntensity;
+  material.uniforms.uSpecularIntensity.value = settings.specularIntensity;
+  material.uniforms.uSpecularPower.value = settings.specularPower;
+  material.uniforms.uFresnelPower.value = settings.fresnelPower;
+  material.uniforms.uBackgroundColor.value = settings.backgroundColor;
+  material.uniforms.uSphereColor.value = settings.sphereColor;
+  material.uniforms.uLightColor.value = settings.lightColor;
+  material.uniforms.uLightPosition.value = settings.lightPosition;
+  material.uniforms.uSmoothness.value = settings.smoothness;
+  material.uniforms.uContrast.value = settings.contrast;
+  material.uniforms.uFogDensity.value = settings.fogDensity;
+  material.uniforms.uCursorGlowIntensity.value = settings.cursorGlowIntensity;
+  material.uniforms.uCursorGlowRadius.value = settings.cursorGlowRadius;
+  material.uniforms.uCursorGlowColor.value = settings.cursorGlowColor;
+}
+
+function setupUI() {
+  const uiContainer = document.getElementById("ui-container");
+  if (!uiContainer) return;
+
+  const pane = new Pane({
+    container: uiContainer,
+    title: "Metaball Controls",
+    expanded: !isMobile
+  });
+
+  pane
+    .addBinding(settings, "preset", {
+      options: {
+        Moody: "moody",
+        Cosmic: "cosmic",
+        Minimal: "minimal",
+        Vibrant: "vibrant",
+        Neon: "neon",
+        Sunset: "sunset",
+        Midnight: "midnight",
+        Toxic: "toxic",
+        Pastel: "pastel",
+        Psychedelic: "dithered",
+        Holographic: "holographic"
+      }
+    })
+    .on("change", (ev) => {
+      applyPreset(ev.value);
+      pane.refresh();
+    });
+
+  const metaballFolder = pane.addFolder({ title: "Metaballs" });
+
+  metaballFolder
+    .addBinding(settings, "fixedTopLeftRadius", {
+      min: 0.2,
+      max: 2.0,
+      step: 0.01,
+      label: "Top Left Size"
+    })
+    .on("change", (ev) => {
+      material.uniforms.uFixedTopLeftRadius.value = ev.value;
+    });
+
+  metaballFolder
+    .addBinding(settings, "fixedBottomRightRadius", {
+      min: 0.2,
+      max: 2.0,
+      step: 0.01,
+      label: "Bottom Right Size"
+    })
+    .on("change", (ev) => {
+      material.uniforms.uFixedBottomRightRadius.value = ev.value;
+    });
+
+  metaballFolder
+    .addBinding(settings, "smallTopLeftRadius", {
+      min: 0.1,
+      max: 0.8,
+      step: 0.01,
+      label: "Small Top Left"
+    })
+    .on("change", (ev) => {
+      material.uniforms.uSmallTopLeftRadius.value = ev.value;
+    });
+
+  metaballFolder
+    .addBinding(settings, "smallBottomRightRadius", {
+      min: 0.1,
+      max: 0.8,
+      step: 0.01,
+      label: "Small Bottom Right"
+    })
+    .on("change", (ev) => {
+      material.uniforms.uSmallBottomRightRadius.value = ev.value;
+    });
+
+  metaballFolder
+    .addBinding(settings, "sphereCount", {
+      min: 2,
+      max: 10,
+      step: 1,
+      label: "Moving Count"
+    })
+    .on("change", (ev) => {
+      material.uniforms.uSphereCount.value = ev.value;
+    });
+
+  metaballFolder
+    .addBinding(settings, "smoothness", {
+      min: 0.1,
+      max: 1.0,
+      step: 0.01,
+      label: "Blend Smoothness"
+    })
+    .on("change", (ev) => {
+      material.uniforms.uSmoothness.value = ev.value;
+    });
+
+  const mouseFolder = pane.addFolder({ title: "Mouse Interaction" });
+
+  mouseFolder
+    .addBinding(settings, "mouseProximityEffect")
+    .on("change", (ev) => {
+      material.uniforms.uMouseProximityEffect.value = ev.value;
+    });
+
+  mouseFolder
+    .addBinding(settings, "minMovementScale", {
+      min: 0.1,
+      max: 1.0,
+      step: 0.05
+    })
+    .on("change", (ev) => {
+      material.uniforms.uMinMovementScale.value = ev.value;
+    });
+
+  mouseFolder
+    .addBinding(settings, "maxMovementScale", {
+      min: 0.5,
+      max: 2.0,
+      step: 0.05
+    })
+    .on("change", (ev) => {
+      material.uniforms.uMaxMovementScale.value = ev.value;
+    });
+
+  mouseFolder.addBinding(settings, "mouseSmoothness", {
+    min: 0.01,
+    max: 0.2,
+    step: 0.01,
+    label: "Mouse Smoothness"
+  });
+
+  const cursorFolder = pane.addFolder({ title: "Cursor" });
+
+  cursorFolder.addBinding(settings, "cursorRadiusMin", {
+    min: 0.05,
+    max: 0.2,
+    step: 0.01,
+    label: "Min Radius"
+  });
+
+  cursorFolder.addBinding(settings, "cursorRadiusMax", {
+    min: 0.1,
+    max: 0.25,
+    step: 0.01,
+    label: "Max Radius"
+  });
+
+  const animationFolder = pane.addFolder({ title: "Animation" });
+
+  animationFolder
+    .addBinding(settings, "animationSpeed", {
+      min: 0.1,
+      max: 3.0,
+      step: 0.1
+    })
+    .on("change", (ev) => {
+      material.uniforms.uAnimationSpeed.value = ev.value;
+    });
+
+  animationFolder
+    .addBinding(settings, "movementScale", {
+      min: 0.5,
+      max: 2.0,
+      step: 0.1
+    })
+    .on("change", (ev) => {
+      material.uniforms.uMovementScale.value = ev.value;
+    });
+
+  const lightingFolder = pane.addFolder({ title: "Lighting" });
+
+  lightingFolder
+    .addBinding(settings, "ambientIntensity", {
+      min: 0,
+      max: 0.5,
+      step: 0.01
+    })
+    .on("change", (ev) => {
+      material.uniforms.uAmbientIntensity.value = ev.value;
+    });
+
+  lightingFolder
+    .addBinding(settings, "diffuseIntensity", {
+      min: 0,
+      max: 1.0,
+      step: 0.01
+    })
+    .on("change", (ev) => {
+      material.uniforms.uDiffuseIntensity.value = ev.value;
+    });
+
+  lightingFolder
+    .addBinding(settings, "specularIntensity", {
+      min: 0,
+      max: 2.0,
+      step: 0.01
+    })
+    .on("change", (ev) => {
+      material.uniforms.uSpecularIntensity.value = ev.value;
+    });
+
+  lightingFolder
+    .addBinding(settings, "specularPower", {
+      min: 1,
+      max: 64,
+      step: 1
+    })
+    .on("change", (ev) => {
+      material.uniforms.uSpecularPower.value = ev.value;
+    });
+
+  lightingFolder
+    .addBinding(settings, "fresnelPower", {
+      min: 1,
+      max: 5,
+      step: 0.1
+    })
+    .on("change", (ev) => {
+      material.uniforms.uFresnelPower.value = ev.value;
+    });
+
+  lightingFolder
+    .addBinding(settings, "contrast", {
+      min: 0.5,
+      max: 2.0,
+      step: 0.1
+    })
+    .on("change", (ev) => {
+      material.uniforms.uContrast.value = ev.value;
+    });
+
+  const glowFolder = pane.addFolder({ title: "Cursor Glow" });
+
+  glowFolder
+    .addBinding(settings, "cursorGlowIntensity", {
+      min: 0,
+      max: 2.0,
+      step: 0.1
+    })
+    .on("change", (ev) => {
+      material.uniforms.uCursorGlowIntensity.value = ev.value;
+    });
+
+  glowFolder
+    .addBinding(settings, "cursorGlowRadius", {
+      min: 0.5,
+      max: 3.0,
+      step: 0.1
+    })
+    .on("change", (ev) => {
+      material.uniforms.uCursorGlowRadius.value = ev.value;
+    });
+
+  glowFolder
+    .addBinding(settings, "fogDensity", {
+      min: 0,
+      max: 0.5,
+      step: 0.01
+    })
+    .on("change", (ev) => {
+      material.uniforms.uFogDensity.value = ev.value;
+    });
+}
+
+function onWindowResize() {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const currentPixelRatio = Math.min(devicePixelRatio, isMobile ? 1.5 : 2);
+
+  camera.updateProjectionMatrix();
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(currentPixelRatio);
+
+  // FIXED: Update resolution uniforms with proper values
+  material.uniforms.uResolution.value.set(width, height);
+  material.uniforms.uActualResolution.value.set(
+    width * currentPixelRatio,
+    height * currentPixelRatio
+  );
+  material.uniforms.uPixelRatio.value = currentPixelRatio;
+
+  // Ensure canvas stays properly positioned
+  const canvas = renderer.domElement;
+  canvas.style.cssText = `
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 0 !important;
+    display: block !important;
+  `;
+
+  if (renderer.info) {
+    renderer.info.autoReset = true;
+  }
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  render();
+}
+
+function render() {
+  const currentTime = performance.now();
+  frameCount++;
+
+  // Smooth mouse movement
+  mousePosition.x +=
+    (targetMousePosition.x - mousePosition.x) * settings.mouseSmoothness;
+  mousePosition.y +=
+    (targetMousePosition.y - mousePosition.y) * settings.mouseSmoothness;
+
+  // Convert to world coordinates using the same system as fixed spheres
+  const normalizedX = mousePosition.x;
+  const normalizedY = mousePosition.y;
+  const worldPos = screenToWorldJS(normalizedX, normalizedY);
+  cursorSphere3D.copy(worldPos);
+
+  // Calculate merges and radius
+  let closestDistance = 1000.0;
+  activeMerges = 0;
+
+  // Use consistent positioning for merge detection
+  const fixedPositions = [
+    screenToWorldJS(0.08, 0.92), // top left
+    screenToWorldJS(0.25, 0.72), // small top left
+    screenToWorldJS(0.92, 0.08), // bottom right
+    screenToWorldJS(0.72, 0.25) // small bottom right
+  ];
+
+  fixedPositions.forEach((pos) => {
+    const dist = cursorSphere3D.distanceTo(pos);
+    closestDistance = Math.min(closestDistance, dist);
+    if (dist < settings.mergeDistance) activeMerges++;
+  });
+
+  const proximityFactor = Math.max(
+    0,
+    1.0 - closestDistance / settings.mergeDistance
+  );
+  const smoothFactor =
+    proximityFactor * proximityFactor * (3.0 - 2.0 * proximityFactor);
+  const dynamicRadius =
+    settings.cursorRadiusMin +
+    (settings.cursorRadiusMax - settings.cursorRadiusMin) * smoothFactor;
+
+  material.uniforms.uCursorSphere.value.copy(cursorSphere3D);
+  material.uniforms.uCursorRadius.value = dynamicRadius;
+
+  if (currentTime - lastTime >= 1000) {
+    fps = Math.round((frameCount * 1000) / (currentTime - lastTime));
+    updateStory(
+      cursorSphere3D.x,
+      cursorSphere3D.y,
+      material.uniforms.uCursorRadius.value,
+      activeMerges,
+      fps
+    );
+    frameCount = 0;
+    lastTime = currentTime;
+  }
+
+  material.uniforms.uTime.value = clock.getElapsedTime();
+  material.uniforms.uMousePosition.value = mousePosition;
+
+  // Periodic cleanup for better memory management
+  if (performance.now() % 5000 < 16) {
+    renderer.renderLists.dispose();
+  }
+
+  renderer.render(scene, camera);
+}
+
+// Email functionality
+document.addEventListener("DOMContentLoaded", function () {
+  const emailLink = document.querySelector(".contact-email");
+  if (emailLink) {
+    const originalText = emailLink.textContent;
+    emailLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      navigator.clipboard
+        .writeText("hi@filip.fyi")
+        .then(() => {
+          emailLink.textContent = "transmission sent to clipboard";
+          setTimeout(() => {
+            emailLink.textContent = originalText;
+          }, 2000);
+        })
+        .catch(() => {
+          window.location.href = "mailto:hi@filip.fyi";
+        });
+    });
+  }
+
+  // --- LÓGICA DOS OVERLAYS ---
+
+  // Overlay 1: Detalhes (Acionado por um botão que você pode adicionar no futuro)
+  const detailsToggler = document.getElementById('details-toggler'); // Este ID não existe no HTML atual, mas mantemos a lógica caso seja adicionado.
+  const detailsOverlay = document.getElementById('chatbot-details-overlay');
+  const closeDetailsBtn = document.getElementById('close-details-btn');
+
+  if (detailsToggler && detailsOverlay && closeDetailsBtn) {
+      detailsToggler.addEventListener('click', (e) => {
+          e.preventDefault();
+          detailsOverlay.classList.add('active');
+      });
+
+      closeDetailsBtn.addEventListener('click', () => {
+          detailsOverlay.classList.remove('active');
+      });
+  }
+
+  // Overlay 2: Integração (Lógica de rolagem e fechamento)
+  const integrationOverlay = document.getElementById('integration-overlay');
+  const closeIntegrationBtn = document.getElementById('close-integration-btn');
+  let integrationOverlayTriggered = false;
+
+  function handleScroll() {
+      if (!integrationOverlayTriggered && window.scrollY > 50) {
+          if (integrationOverlay) {
+              integrationOverlay.classList.add('active');
+              integrationOverlayTriggered = true;
+              window.removeEventListener('scroll', handleScroll);
+          }
+      }
+  }
+
+  window.addEventListener('scroll', handleScroll, { passive: true });
+
+  if (integrationOverlay && closeIntegrationBtn) {
+      const closeIntegrationOverlay = () => {
+          integrationOverlay.classList.remove('active');
+      };
+
+      closeIntegrationBtn.addEventListener('click', closeIntegrationOverlay);
+      integrationOverlay.addEventListener('click', (e) => {
+          if (e.target.id === 'integration-overlay') closeIntegrationOverlay();
+      });
+      document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && integrationOverlay.classList.contains('active')) {
+              closeIntegrationOverlay();
+          }
+      });
+  }
+});
+
+// Adicionar esta nova função dentro do document.addEventListener("DOMContentLoaded", ...)
+
+// NOVO: Lógica do Overlay de Detalhes do Footer
+const detailsToggler = document.getElementById('details-toggler');
+const detailsOverlay = document.getElementById('chatbot-details-overlay');
+const closeIntegrationBtn = document.getElementById('close-integration-btn');
