@@ -80,20 +80,13 @@ function initializeChatbot() {
         const now = new Date();
         const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        // MENSAGEM FOCO EM AÇÃO (FUNIL)
         welcomeContainer.innerHTML = `
             <strong>Bytezinho AI</strong>
-            <p>Fala, ${escapeHtml(userName)}! 🤖<br>
-            Bora descobrir se você tem o perfil para entrar no mercado de tecnologia em 2026? É rapidinho!</p>
-            
+            <p>Olá, ${escapeHtml(userName)}! Sou o Bytezinho, criado por alunos do curso jovem programador. Como posso ajudar você hoje?</p>
             <div class="suggestions">
-                <button class="suggestion-btn funil-start" style="background:var(--chatbot-secondary); border-color:#fff; font-weight:bold;" data-message="Quero saber se posso participar! 🚀">
-                    🚀 Quero saber se posso participar!
-                </button>
-                
-                <button class="suggestion-btn" data-message="Como funciona o curso?">
-                    🤔 Como funciona o curso?
-                </button>
+                <button class="suggestion-btn" data-message="Como faço para participar?">Como faço para participar?</button>
+                <button class="suggestion-btn" data-message="Sou menor de idade posso participar?">Sou menor de idade posso participar?</button>
+                <button class="suggestion-btn" data-message="Onde eu posso fazer o curso?">Onde eu posso fazer o curso?</button>
             </div>
             <span class="message-time">${time}</span>
         `;
@@ -102,7 +95,7 @@ function initializeChatbot() {
         newSuggestionBtns.forEach(btn => {
             btn.addEventListener('click', () => handleSuggestionClick(btn));
         });
-    }}
+    }
 
     function addMessage(message, isBot = false, stream = false) {
         if (!chatBody) return;
@@ -259,6 +252,6 @@ function initializeChatbot() {
             }
         });
     }
-
+}
 
 initializeChatbot();
