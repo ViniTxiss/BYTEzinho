@@ -98,10 +98,10 @@ function initializeChatbot() {
             <span class="message-time">${time}</span>
         `;
 
-        const newSuggestionBtns = welcomeContainer.querySelectorAll('.suggestion-btn');
-        newSuggestionBtns.forEach(btn => {
+       newSuggestionBtns.forEach(btn => {
             btn.addEventListener('click', () => handleSuggestionClick(btn));
         });
+    } // <--- CORREÇÃO: Apenas uma chaveta para fechar a função addWelcomeMessage.
     }}
 
     function addMessage(message, isBot = false, stream = false) {
@@ -262,4 +262,5 @@ function initializeChatbot() {
 
 
 initializeChatbot();
+
 
